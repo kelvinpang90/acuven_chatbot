@@ -3813,3 +3813,9 @@ v1 MVP 的实施记录已归档到 [tasks/todo-v1-mvp.md](todo-v1-mvp.md)（任�
 - 2026-09-04（批次 06 立项 + 两处自我更正）：任务 11 真机验收通过后，用户拍板改思路——手机号即身份、客户信息物理落盘、商品用可点列表、支持语音。六个前提逐条问定（身份机制 / 网页那条线 / 清理边界 / 表格形式 / 转录选型 / 存储选型），写成批次 06。
   **侦察推翻了我自己先前说的两件事，记在这里免得下次又搞错**：① 我原以为「ERP 定期 reseed 会干掉手工建的 earbuds SKU、要配重建脚本」——**错的**，`services/demo_reset.py` 的 `RESET_TABLES` 不含 `skus` / `customers`，只清交易单据和库存，主数据全活；② 我原打算 ERP 侧也用 `[DEMO]` 标记逐行删——**不需要**，erp_os 的 reset 是整表 TRUNCATE，全有或全无，标记只对 CRM 有意义。
   另外确认了一件本来打算自己造的东西 **erp_os 已经有了**：`POST /api/admin/demo-reset` + `demo_reset_nightly`（每天 3am，gated on `DEMO_MODE`）。反过来说，演示单在 erp_os 里**删不掉也取消不了**（没有 DELETE 路由，`cancel` 只接受 DRAFT / CONFIRMED，而我们的单都到了 FULLY_SHIPPED + INVOICED）——这才是 ERP 侧必须走 reset 的真正原因。
+
+## 部署加主机级锁（2026-11-15，Kelvin 2026-11-14 批准）
+
+- 起因：同一台 VPS 上，另一个项目部署成功后的 `docker image prune` 正好落在别的项目 `compose pull` 的几秒里，containerd 报 `content digest not found` / `failed to extract layer`，部署失败（2026-10-27、11-03、11-14 三次）。决定：主机上所有用 docker 部署的项目共用一把 `flock`，部署一个接一个跑。约定登记在 vps_infra README「部署串行化」。
+- 改动：`.github/workflows/deploy.yml` 的 SSH 内联脚本开头取锁，最多等 300 秒，等不到就在动任何东西之前失败（重跑该 job 即可）；`command_timeout` 从默认 10m 调到 13m，留出等锁时间。
+- 验证：在 WSL（Ubuntu 24.04，真 `flock`）按 appleboy/ssh-action v1.0.3（drone-ssh 1.7.3）的方式拼出脚本，用假 docker / git 跑，bash、dash 都过：锁空闲直接过；被占时打印持锁方并等待，释放后继续；超时时非零退出、没调用任何 git / docker；锁文件不可写时退回只读打开照样能锁；与另一个项目同时跑时，后到的一方排队。
