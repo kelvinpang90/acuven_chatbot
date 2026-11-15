@@ -48,11 +48,26 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          # Default is 10m. The host deploy lock may wait up to 5 minutes before the
+          # script does its own work; cutting SSH mid-deploy is worse than waiting.
+          command_timeout: 13m
           # Off by default, which makes the step's exit code that of the LAST
           # command. A failed pull followed by a successful `docker image
           # prune -f` reports green while the old container keeps running.
           script_stop: true
           script: |
+            # Host-wide deploy lock: deploys of all projects on this host run one at a
+            # time (convention: vps_infra README, deploy serialization section). Another
+            # project's image prune landing inside this project's pull broke deploys
+            # three times. The lock covers the whole script and is released when this
+            # shell exits. Keep each line below one complete command: with script_stop,
+            # the action appends an exit-code check after every line.
+            # `command exec`: a lock file this user cannot write is opened read-only
+            # instead (flock works on it) without a failed open ending the shell.
+            { command exec 9>>/run/lock/acuven-deploy.lock; } 2>/dev/null || { command exec 9</run/lock/acuven-deploy.lock; } 2>/dev/null || { echo "cannot open the host deploy lock; nothing has been changed"; exit 1; }
+            flock -n 9 || { echo "another deploy holds the host lock ($(head -1 /run/lock/acuven-deploy.lock 2>/dev/null)); waiting up to 300s"; flock -w 300 9; } || { echo "the host deploy lock was not free within 300s; nothing has been changed (re-run this job)"; exit 1; }
+            printf '%s %s pid=%s since=%s\n' ai_chatbot_demo "${{ github.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
+            echo "holding the host deploy lock"
             cd ${{ env.VPS_DEPLOY_PATH }}
             git pull origin master
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
