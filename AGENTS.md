@@ -1,5 +1,7 @@
 # 全局工作原则
 
+> 本文件与同目录 `AGENTS.md` 是同一份内容的两个副本（分别给 Claude Code / Codex），改一个必须同步另一个。
+
 ## 沟通
 - 全部使用中文回复
 - 需求模糊时先澄清，不脑补需求
@@ -36,13 +38,85 @@
 
 ## 任务管理
 
-⚠️ **本仓库的编号任务走 `tasks/todo.md` 顶部那套约定，与下面几条冲突时以它为准**（2026-09-01 用户拍板）。`todo.md` 里的批次计划**是预先写好并已确认过的**，所以「先计划、等确认」那一步已经发生过了，不要在每个任务上再来一次。
+2026-11-26 起（合并 Chatbot E-21，Q-25）取代旧的 `tasks/todo.md` 约定；`todo.md` 冻结为历史记录，只读不续写。
 
-- **一个 session 一个编号任务**：读 `todo.md` → 做完 → 验收 → commit，中途不需要逐步审批。计划本身有异议时才停下来讨论
-- 先计划：`todo.md` 里**还没有**的工作（临时需求、探索型任务）才需要先写计划、等确认
-- 追踪进度：做完把 `[ ]` 改成 `[x]`
-- 记录结果：在 `todo.md` 对应任务下写清楚做了什么、偏离了什么、验证到什么程度
-- 记录教训：写进该任务的记录里。**没有 `tasks/lessons.md` 这个文件**，不要凭空创建；双 agent 审查的经验教训记在 `tasks/REVIEW.md` 的「记账」一节
+- **任务编号 `CHAT-TASK-NNN`**（控制面登记的 task_id_pattern：`^CHAT-TASK-[0-9]{3}$`）。计划与记录在 [docs/TODO.md](docs/TODO.md)，
+  顶部的 planning-v1 块决定下一项任务；执行权限在 [.platform/tasks.yaml](.platform/tasks.yaml)。`docs/TODO.md` 里的计划**是预先写好并已确认过的**，
+  不要在每个任务上再走一遍「先计划、等确认」。
+- **一个 session 一个编号任务**：读 `docs/TODO.md` → 做完 → 验收 → 开 PR，中途不需要逐步审批。计划本身有异议时才停下来讨论
+- 先计划：`docs/TODO.md` 里**还没有**的工作（临时需求、探索型任务）才需要先写计划、等确认
+- 追踪进度：做完把 `[ ]` 改成 `[x]`，在对应任务下写清楚做了什么、偏离了什么、验证到什么程度
+- 记录教训：写进该任务的记录里。**没有 `tasks/lessons.md` 这个文件**，不要凭空创建；审查的经验教训记在 `tasks/REVIEW.md` 的「记账」一节
+- **以上几条（改复选框、写记录）只适用于会话。OpenClaw Worker 的 run 只改该任务的 `allowed_change_paths`**，不碰 `docs/TODO.md`，也不在任何文件里写「检查通过」之类的结论；它的任务记录由自动收尾或会话补。
+
+## 项目概况
+
+- **是什么**：WhatsApp AI 客服。Demo 实例是给客户看的行业演示（多个行业机器人 + 实时展示工具调用的导演台）；
+  按已批准的合并设计（[docs/product/](docs/product/)），同一份代码将来再跑一个 Acuven 自己的生产客服实例。
+- **技术栈**：FastAPI + Redis + MySQL（审计、行业后台），前端 Vite + React + TypeScript；Docker 部署在共享 VPS，合并到 `master` 即按提交 SHA 自动部署。
+- **OpenClaw 契约**：[.platform/](.platform/)（project / commands / tasks 三个文件，默认 deny；`project_id` `chatbot`）。
+
+## 角色与流程
+
+- **合并分工照 Stock Core**（Q-21，Kelvin 2026-11-26 批准）：`master` 受保护，不直推；一个编号任务一个分支一个 PR，不夹带，只用 squash 合并。
+  - 会话开的 PR：合并前另起独立冷审（规矩与记账见 [tasks/REVIEW.md](tasks/REVIEW.md)），审查通过且 CI 全绿后由实现会话自己合并。
+    Q-21 的子问题「碰钱或个人数据的 PR 是否仍由 Kelvin 合并」尚未定，遇到这种 PR 先问 Kelvin。
+  - OpenClaw Worker 的 PR：以 Draft PR 交付，CI 全绿后由 Kelvin 在 Telegram「批准」合并。
+- 合并即部署：部署工作流按 SHA 部署，公网 `/health` 报出该 SHA 才绿；之后仍值得探一下 `/api/bots`（200）与 `/webhook/whatsapp`（不带参数 403）。
+- **碰钱、碰个人数据的任务先出设计、Kelvin 批准后才写代码**：钱包 / 账本 / 定价 / 支付 / 退款 / 幂等 / 状态机，
+  以及收集、存储、展示、导出个人数据（姓名、电话、邮箱、地址、证件等）的改动。设计一变，之前的批准作废。
+  纯前端样式、文档、CI、脚本不走闸门。PR 正文写明「设计闸门：<设计的 Issue 或 PR>」或「设计闸门：不适用」并给出理由。
+- `.platform/` 只由运营者的 PR 与下面的自动收尾 PR 改；OpenClaw 的 run 改不了它。任务完成后由 OpenClaw 自动开收尾 PR，CI 通过后自动合并：
+  只含两处机械改动——`tasks.yaml` 里该任务 `ready` 改成 `done`、从 planning-v1「当前计划」移除这一项（其后序号减一），
+  不触发部署（`deploy.yml` 的 `paths-ignore`）。只有自动收尾失败（Telegram 收到「自动收尾失败」通知，附原因与建议）时才由人手工开收尾 PR。
+  自动收尾要在控制面登记表给本项目加 `auto_closeout: true` 才启用（由控制面会话开登记表 PR），且 Worker 本机配置
+  `merge_enabled` 为真；未启用时收尾 PR 由人手工开。
+
+## 密钥与敏感信息不进仓库
+
+- **本仓库是公开仓库。** 绝不提交凭据、密钥、token、`.env`、证书私钥、客户数据。配置用 `.env.example` 写**变量名与明显的示例值**。
+- 不写真实主机名、IP、服务器上的绝对路径、本机路径。部署连接信息放 GitHub secrets，健康检查地址放 repository variables。
+  例外：部署脚本里的主机部署锁路径（约定见 `vps_infra` README「部署串行化」）；已有的 Demo 域名、配置默认值与 VPS 目录（历史文档、`config.py`、`docker-compose.prod.yml` 里那些）照旧，不新增。
+- 发现已经提交的密钥：立即告诉 Kelvin 去轮换，不要只删文件——历史里还在。
+
+## 登记任务（.platform/tasks.yaml 与 planning-v1）
+
+- 每个 `ready` 任务都要出现在 [docs/TODO.md](docs/TODO.md) 的 planning-v1 块里；「当前计划」里的每一项都要在 `tasks.yaml` 登记为 `ready`。
+  格式见 `docs/TODO.md` 块上方的注释，格式不对整块作废、项目 fail closed。
+- `allowed_change_paths` 逐个写精确文件路径（不是目录、不是通配符）；`allowed_commands` 只引用 `.platform/commands.yaml` 里已有的 id。
+  文件名含 `secret`、`key`、`token` 等词或是 `.env*` 的文件，控制面一律拒收，任务碰不了（例如 `backend/.env.example`：需要时由会话先改好）。
+- **只在 CI 跑的检查不写进 `allowed_commands`**：后端 pytest（大量用 TestClient，Worker 的 MXC 沙箱禁回环，会挂住）、
+  前端 node 检查。Worker 本来就要等 PR 的必需 CI 检查全绿才进入「等待批准」，测试照样被强制；
+  验收标准依赖它们通过时，写明由哪条必需 CI 检查（`unit` 或 `frontend`）执行。目前沙箱里能跑的只有 `lint.check`。
+- **共享文件清单**（登记时逐个对照，补齐 `allowed_change_paths`）：
+  - 新增或改名后端路由、要经前端 nginx 转发的：`frontend/nginx.conf`、`frontend/vite.config.ts`、`backend/tests/test_console_routing.py`
+    （每个导演台路径都要在前两个文件里点名，第三个文件核对这件事）。
+  - 新增配置项：`backend/app/config.py`；示例值要进 `backend/.env.example` 的，由会话在登记前先改好（见上）。
+- **任务的标题、目的与验收标准里不写任何 `xxx://` 形式的地址、主机名、邮箱地址**（也不写 IP、绝对路径）：它们会原样进 PR 正文并过泄漏规则，被拒即 run 失败。
+- **任务的 `title` 写成一句中文说明**：80 字符内，单行，不用反引号、尖括号、「」『』【】〖〗、emoji、链接、路径。
+  OpenClaw 的推荐行会显示它：超过 80 字符、含反引号、尖括号、上述括号、不可见字符或泄漏形状的标题会被控制面拒绝、不显示；
+  其余几条（一句中文、不用 emoji、链接、路径）是本项目的填写约定。
+- **登记为 `ready` 之前按条件跑设计预审**（完整说明在控制面仓库 `docs/ONBOARD-PROJECT.md`「登记任务之前」）：
+  - 要跑：任务有设计闸门（碰钱、碰个人数据、状态机、改数据库结构或迁移），或 `contract_check` 给出拆分 WARN（`consider splitting`），
+    或预计改动接近约 1500 行。在控制面仓库对本仓库的干净检出（或 `git archive` 导出）运行
+    `python -m worker.design_precheck --repo <检出> --project-id chatbot --task <任务 id> --design <设计文件相对路径> --claude <claude 程序绝对路径>`，
+    把完整输出贴进登记 PR；`NOT_READY` 的发现修掉，或逐条写明为什么不成立。
+  - 其余任务在登记 PR 里写「预审：不适用」并给出理由。
+- **拆分规则**：一个任务只做一层（数据库 / 业务规则 / 接口 / 前端），用 `depends_on` 串起来，每一层合并后都能单独通过检查与 CI；
+  规则多的设计先交付规则与对应设计例子的测试，再接接口；`allowed_change_paths` 超过 12 个、验收标准超过 8 条、或预计改动超过约 1500 行，
+  先拆（拆不开在任务里写明原因）；预审报出的 `SCOPE_GAP` 先改契约，不留到实现时。阶段 0 的拆分草案见 `docs/product/DESIGN.md` 第 13 节。
+
+```text
+登记任务时的浏览器验收约定（OpenClaw 浏览器验收契约）：
+- 有用户可见页面的前端任务，登记时默认带 acceptance 块：沿用项目已有的验收命令，writes: false，按页面写 2–4 个只读步骤
+  （小写下划线步骤名），timeout_seconds 不超过 300；验收命令不写进 allowed_commands；allowed_change_paths 加上验收脚本。
+- 验收标准里写清每个新步骤验什么，通用约束一句「沿用验收脚本已有的约束」带过；脚本只执行 stdin 里 steps 列出的步骤。
+- 纯后端、数据库、文档任务不带；运营者说「这个不验」时不带。
+- 任务的标题、目的与验收标准会原样进 PR 正文并过泄漏规则：不写任何 xxx:// 形式的地址、主机名、邮箱地址。
+```
+
+（上面这段只在项目启用了浏览器验收——`.platform/project.yaml` 有 `acceptance_hosts`、`commands.yaml` 有验收命令——之后才生效；
+目前没有启用，任务不带 `acceptance` 块，最后一条照样适用。）
 
 ## 核心
 **多想少动 · 知错即改 · 往正确的方向走**

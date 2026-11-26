@@ -18,6 +18,13 @@ git show HEAD~1:tasks/todo.md | sed -n '/任务 N/,/^- \[/p'   # 规格:开发�
 git diff HEAD~1..HEAD                                        # 改动
 ```
 
+2026-11-26 起的 `CHAT-TASK-NNN` 任务(`tasks/todo.md` 已冻结):规格取 `origin/master` 上的 `.platform/tasks.yaml` 该任务条目与引用的设计文档,改动取整个 PR(一个 PR 可以有多个 commit,squash 合并):
+
+```bash
+git show origin/master:.platform/tasks.yaml                   # 规格:登记时的样子
+git diff origin/master...HEAD                                # 改动
+```
+
 多于一个 commit 时,用 `origin/master..HEAD` 定范围,base 取该范围第一个 commit 的父提交。
 
 ### 必须自己跑,不许只读代码
@@ -53,6 +60,7 @@ docker run --rm -v "E:\projects\ai_chatbot_demo\backend:/app" -w /app python:3.1
 
 ```bash
 git show HEAD -- tasks/todo.md    # 开发方的自辩
+# CHAT-TASK-NNN 任务:自辩在 PR 正文与 docs/TODO.md 的任务记录里
 ```
 
 逐条判断它的理由哪些不成立。然后回答一个自评问题:**第一阶段你漏掉了哪些它自己主动承认的问题?** 这说明你的审查有什么盲区。
@@ -93,6 +101,8 @@ git show HEAD -- tasks/todo.md    # 开发方的自辩
 | CHAT-002 PR #6 第 1 轮（2026-11-26） | Claude / Claude（Agent 子任务冷审） | 4 | **4** | **0** | 1×P2 + 3×P3。P2（补了 CRM 设置后，一个测试会把带凭据的 CRM 单例留给后续测试）有探针运行作证，已修；P3-1（master 上的 CI 不再被取消）已改；P3-2（PR 改目标分支不触发）不改；P3-3 写进 PR 说明 |
 | CHAT-001 PR #7 + CHAT-003 第 1 轮（2026-11-26） | Claude / Claude（Agent 子任务冷审，两组一起审） | 7 | **7** | **0** | CHAT-001 0 条，按原样合并。CHAT-003：2×P2（按 SHA 起镜像后旧镜像永不 dangling、prune 删不掉；VPS 上手工 compose 会回退到 `.env` 里的旧镜像）都已修；P3 五条：回滚下限写进 workflow、健康检查轮询缩到约 6 分钟、PR 说明写偏离、合 master；detached HEAD 只在注释里写明。全是读代码推测，健康检查 JSON 格式有探针 |
 | CHAT-003 PR #8 第 2 轮（2026-11-26） | Claude / Claude（Agent 子任务冷审，只审第 1 轮修订） | 5 | **5** | **0** | 5×P3，无 P1/P2；清理与改写 `.env` 两行用假 `docker images` 输出与假 `.env` 实跑过。改了 4 条（按镜像仓库精确列出、不吞 rmi 报错、`prev_sha` 注释、`.env` 缺键时报红不追加）；P3-5（改名后旧名镜像要手工清）记在 PR 里。改后没再审第 3 轮 |
+| 改名跟进 PR #9 第 1 轮（2026-11-26） | Claude / Claude（Agent 子任务冷审） | 2 | **2** | **0** | 2×P3，无 P1/P2；按原样合并，改名后首次部署健康检查报出 `568bc63` |
+| CHAT-004 PR #10 第 1 轮（2026-11-26） | Claude / Claude（Agent 子任务冷审） | 7 | **7** | **0** | 1×P2 + 6×P3，另有 1 处小问题，全部采纳。P2：CHAT-TASK-005 合并即部署，Demo 的 `.env` 没设 `CHATBOT_ENV` 时新容器起不来，原先只靠文字提醒；改为把「Kelvin 先在 VPS 加这一行并核实」写成控制面分配 Worker 的前置条件（原想放进计划块「已阻塞」，但 `onboard check` 要求当前计划有 ready 任务）。P3 里最有价值的是「镜像带 `--reload`，启动失败时容器不退出」，已登记为待办。没跑第 2 轮 |
 
 **审查基建第一次被审出来的四条：**
 

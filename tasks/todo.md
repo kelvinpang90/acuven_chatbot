@@ -1,5 +1,8 @@
 # 实施计划：引擎盖计划（WhatsApp 炫技升级）
 
+> ⚠️ **2026-11-26 起本文件冻结为历史记录，只读不续写**（合并 Chatbot E-21 的 Q-25）。新的编号任务是 `CHAT-TASK-NNN`，
+> 计划与记录在 [docs/TODO.md](../docs/TODO.md)，执行权限在 `.platform/tasks.yaml`。下文「怎么用这份清单」的约定只对下面这些历史任务成立。
+
 方案文档：https://claude.ai/code/artifact/638f064c-a775-4633-b211-41bf08dbc973
 v1 MVP 的实施记录已归档到 [tasks/todo-v1-mvp.md](todo-v1-mvp.md)（任务 1-16.1 全部完成）。
 

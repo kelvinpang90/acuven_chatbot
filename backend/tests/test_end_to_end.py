@@ -31,7 +31,6 @@ import pytest
 from anthropic.types.beta import BetaMessage, BetaTextBlock, BetaToolUseBlock, BetaUsage
 from fastapi.testclient import TestClient
 
-from app.bots.registry import get_bot
 from app.config import settings
 from app.console import events
 from app.main import app

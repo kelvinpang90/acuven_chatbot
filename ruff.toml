@@ -1,0 +1,21 @@
+# Lint rules for the Python code under backend/ (CHAT-004). OpenClaw's Worker runs
+# `python -I -m ruff check .` from the repository root, exactly as CI's `unit` job
+# does (.platform/commands.yaml lint.check). Static checks only: no formatter.
+target-version = "py313"
+# Markdown: ruff would lint Python blocks inside docs. tasks/review/task-*: the
+# repro scripts and probes of past review rounds, kept as they were when the review
+# was written rather than rewritten to today's rules. The review tooling next to
+# them (tasks/review/*.py) is still in use and is checked.
+extend-exclude = ["*.md", "tasks/review/task-*"]
+
+[lint]
+# Ruff's classic defaults (pyflakes plus the pycodestyle errors), written out so a
+# ruff release that widens its defaults cannot turn CI red on its own.
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# Imports the pytest fixtures of test_crm_send.py so both files share them; pytest
+# passes them in by parameter name, which pyflakes reads as a redefinition.
+# The cost: F811 is also what catches two tests with the same name (the first is
+# silently never run), and in this one file it no longer does.
+"backend/tests/test_crm_send_template.py" = ["F811"]
