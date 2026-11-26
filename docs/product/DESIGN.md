@@ -1,10 +1,10 @@
 # 顾客侧 AI Chatbot：设计
 
-> 版本：0.1｜2026-11-26｜状态：**草案，待 Kelvin 批准**。批准前不登记任务、不改代码。
+> 版本：0.2｜2026-11-26｜状态：**Kelvin 2026-11-26 批准**；待决定问题 Q-01～Q-27 同日全部按推荐答复（[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) §3）。任务登记另行进行。
 >
-> 需求见 [REQUIREMENTS.md](REQUIREMENTS.md)（R-x.y、N-x），接入契约见 [SUPPORT_CONTRACT_V1.md](SUPPORT_CONTRACT_V1.md)，待决定问题见 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)（Q-nn）。文中「现状」都指 2026-11-26 `origin/master`（`af6289f`）与 `acuven_aichat` 当前代码，给出文件与行号的地方按当时核对。
+> 需求见 [REQUIREMENTS.md](REQUIREMENTS.md)（R-x.y、N-x），接入契约见 [SUPPORT_CONTRACT_V1.md](SUPPORT_CONTRACT_V1.md)，待决定问题与答复见 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)（Q-nn）。文中「现状」都指 2026-11-26 `origin/master`（`af6289f`）与 `acuven_aichat` 当前代码，给出文件与行号的地方按当时核对。
 >
-> 写法约定：「建议」= 本设计的提议，批准后生效；「待定」= 列在 Q-nn，不替 Kelvin 选。
+> 写法约定：文中「建议」随本组文档 2026-11-26 批准生效；引用 Q-nn 的地方即指该问题的答复（全部按推荐）。
 
 ---
 
@@ -62,7 +62,7 @@
 | 搬 | aichat 现状（`acuven_aichat/app/`） | 合并后落点 | 按什么打开 |
 | --- | --- | --- | --- |
 | Coexistence 同步字段处理 | `coexistence.py`、`routers/whatsapp_webhook.py:71-82` | WhatsApp 入站的一个分支：同步类变更先于号码过滤与白名单处理 | 渠道 `coexistence=true` |
-| 回音接管 | `handover.py`、`session_store.py:146-183`；自回音防护 `aichat:sent:{wamid}` | 接手通道「手机 App 回音」（§8.3）；状态并入统一状态机 | 渠道 `coexistence=true`；选了别的接手方式时是否也生效见 Q-27 |
+| 回音接管 | `handover.py`、`session_store.py:146-183`；自回音防护 `aichat:sent:{wamid}` | 接手通道「手机 App 回音」（§8.3）；状态并入统一状态机 | 渠道 `coexistence=true`；选了别的接手方式时也照样生效（Q-27） |
 | 管理指令通道 | `admin.py`：`#list`、`#hold <编号或号码>`、`#bot <编号或号码>`；最近会话 ZSET | 渠道的管理指令处理，判断在白名单之前 | 渠道 `admin_phones` 非空 |
 | 白名单 | `config.py:55-66,86-93`；白名单外不写历史、不改状态 | 渠道 `reply_allowlist` | 每个 WhatsApp 渠道都有（Demo 渠道配 `*`） |
 | 历史落盘 | `coexistence.py:38-49`：`/data/coexistence/{field}-{YYYYMMDD}.jsonl`，写失败回 500 让 Meta 重投 | 同样落盘，目录按实例与渠道分；加保留期清理（Q-16） | 渠道 `coexistence=true` |
@@ -91,20 +91,20 @@
 | 演示数据种子与每晚重置 | `tasks/seed_*.py`、`tasks/cleanup.py` | 仅 Demo（H-01） |
 | 零售机器人「手机号即身份」查 ERP | `tools/erp.py:363-412` | 仅 Demo，与 B-05 的冲突见 Q-09 |
 | CRM 收件箱（J-04） | `crm_events.py`、`internal_crm.py`、`crm_send.py`、`crm_templates.py` | 两个实例都有：它是接手通道之一（§8），Demo 里接 `acuven_crm_demo` |
-| 企业微信渠道、已停用网关入口 `/internal/whatsapp/inbound` | `routers/wecom_webhook.py`、`routers/internal_whatsapp.py` | 待定（Q-18） |
+| 企业微信渠道、已停用网关入口 `/internal/whatsapp/inbound` | `routers/wecom_webhook.py`、`routers/internal_whatsapp.py` | 网关入口删除；企业微信代码保留、仅 Demo（Q-18） |
 | Coexistence、回音接管、管理指令、白名单、落盘 | 从 aichat 搬入 | 两个实例都有，按渠道配置 |
 | 网页聊天窗口、接入契约、工作台、计费上报 | 新增 | 两个实例都有 |
 
-**两个实例的部署**（建议，细节见 Q-13、Q-14）：
+**两个实例的部署**（Q-13、Q-14）：
 
 | | Demo 实例 | 生产实例 |
 | --- | --- | --- |
 | 域名 | `chatbot.acuventech.com`（不变） | `aicustomer.acuventech.com`（aichat 的 Meta App 回调已指向它；1a 停 aichat 容器时切过来，阶段 0 无公网入口，Q-14） |
 | Meta App | 现 demo 号所在 App（`Acuven Connect`） | `Acuven Customer Service`（aichat 的 App） |
 | Redis | `infra_redis` db16（不变） | 沿用 aichat 的 db17 |
-| MySQL | `ai_chatbot`、`ai_chatbot_verticals`（不变） | 新库（名称随 Q-01） |
+| MySQL | `ai_chatbot`、`ai_chatbot_verticals`（不变） | 新库 `acuven_chatbot`（随仓库名，Q-01） |
 | 计费项目 | 内部租户下的 Demo 项目（F-04） | 每个租户按「Chatbot × 模块」（§10） |
-| 部署 | 合并到主分支即按 SHA 部署 | 同一工作流、同一 SHA，节奏见 Q-12 |
+| 部署 | 合并到主分支即按 SHA 部署 | 同一工作流、同一 SHA：Demo 先部署并健康检查通过，再部署生产（Q-12） |
 
 ## 5. 租户模型
 
@@ -120,7 +120,7 @@ tenant ─┬─ meta_app_link ── meta_app（Meta App：app_id、app_secret�
         │                   可用能力（引用 integration 的能力名）、本地工具（仅 Demo）
         ├─ integration ──── 业务系统：kind、base_url、两个方向的签名密钥（新旧各一把）、
         │                   缓存的能力清单（含版本）、租户对每项能力的开关与收紧
-        ├─ handover_config  默认接手方式（粒度见 Q-03）、工作台账号（阶段 2）
+        ├─ handover_config  默认接手方式（渠道未单独配置时用它，Q-03）、工作台账号（阶段 2）
         ├─ billing_link ─── billing 租户 id、每个模块的项目 id 与项目凭据（§10）
         └─ audit_log ────── 配置变更记录（谁、何时、改了什么；R-3.5）
 ```
@@ -128,7 +128,7 @@ tenant ─┬─ meta_app_link ── meta_app（Meta App：app_id、app_secret�
 字段说明：
 
 - **tenant**：`id`、`name`、`kind`（`internal` / `customer` / `demo`，只影响计费模式与 Demo 校验，R-2.2）、`status`（`active` / `suspended` / `closed`）。`demo` 租户只能存在于 Demo 实例。
-- **meta_app**：Meta App 有一个 App 级的 webhook 回调地址；实例里所有经该 App 接入的号码共用它的 `app_secret` 验签。Meta 另有按 WABA 或按号码覆盖回调地址的做法（`override_callback_uri` 一类），本设计未核实，阶段 3 涉及专属/自托管时再核（Q-10）；阶段 0～2 每个实例只用自己的 App 级回调。用 Embedded Signup 接入的号码，业务 token 属于这个 App（Acuven 以 Tech Provider 身份持有）。
+- **meta_app**：Meta App 有一个 App 级的 webhook 回调地址；实例里所有经该 App 接入的号码共用它的 `app_secret` 验签。Meta 另有按 WABA 或按号码覆盖回调地址的做法（`override_callback_uri` 一类），本设计未核实，也不依赖它：专属/自托管实例接客户自己的 App（Q-10）；阶段 0～2 每个实例只用自己的 App 级回调。用 Embedded Signup 接入的号码，业务 token 属于这个 App（Acuven 以 Tech Provider 身份持有）。
 - **channel**：WhatsApp 渠道的 `phone_number_id` 全实例唯一（入站路由键）；网页渠道的 `site_key` 是公开标识，可以写在网页上。**核验方式**：WhatsApp 渠道记下用哪个已接入系统的哪项核验能力（契约 §6.2），租户接了多个系统时由运营者指定，未指定 = 该渠道不能用需要顾客身份的能力；网页渠道的身份来自宿主系统令牌，核验方式固定为「网页令牌」。
 - **bot**：现有 `BotConfig`（`bots/registry.py`）的字段原样保留，加 `tenant_id` 与「可用能力」。
 - **integration**：每个租户接一个业务系统一条；同一个网店系统被两个租户用，就是两条，各有密钥。
@@ -143,7 +143,7 @@ tenant ─┬─ meta_app_link ── meta_app（Meta App：app_id、app_secret�
 
 ### 5.3 存储与密钥
 
-- 配置存在实例自己的 MySQL。建议新表用 **Alembic** 管理（与模板、网店、Stock Core 一致）；现有 `audit.py`、`verticals/` 的 `CREATE TABLE IF NOT EXISTS` 不动（Q-15）。
+- 配置存在实例自己的 MySQL。新表用 **Alembic** 管理（与模板、网店、Stock Core 一致）；`verticals/` 的 `CREATE TABLE IF NOT EXISTS` 不动；审计三张表由 Alembic 基线迁移接管，`audit.py` 的运行时建表在 CHAT-017 去掉（Q-15）。
 - 密钥（业务 token、app secret、签名密钥、计费项目凭据、令牌密钥）在库里加密存放，主密钥来自环境变量 `CHATBOT_SECRETS_KEY`；支持换主密钥（新旧两把并存期间重新加密）。日志与导出不出现明文。
 - 配置读取按请求进行，允许最多几秒的进程内缓存，保证「收紧立即生效」（R-3.5）。
 
@@ -161,10 +161,10 @@ Demo 实例迁移时生成：一个 `demo` 租户「行业演示」（demo 号�
 | 形态 | 怎么部署 | 与本设计的关系 |
 | --- | --- | --- |
 | 多租户 SaaS | 生产实例，多个租户；Acuven 是其中一个 | 默认形态，阶段 1a 起 |
-| Acuven 托管专属 | 同一镜像另起一个实例（独立库、Redis、域名），里面一个租户 | 只是多一份部署配置；Meta App 怎么接见 Q-10 |
-| 客户自托管 | 客户在自己机器上跑同一镜像与同一版本 | 同上；计费见 Q-11；C-14：客户机器不接成 SaaS 租户 |
+| Acuven 托管专属 | 同一镜像另起一个实例（独立库、Redis、域名），里面一个租户 | 只是多一份部署配置；WhatsApp 号接客户自己的 Meta App（Q-10） |
+| 客户自托管 | 客户在自己机器上跑同一镜像与同一版本 | 同上；不上报用量，按授权收费、客户自带模型密钥（Q-11）；C-14：客户机器不接成 SaaS 租户 |
 
-约束：经 Acuven 的 App 接入的号码，默认 webhook 都到这个 App 的回调地址，也就是 Acuven 的多租户生产实例（§5.1）。专属与自托管实例可以用客户自己的 Meta App、由多租户实例转发（与 J-01 停用网关的方向相反），或在 Meta 支持的前提下按 WABA/号码把回调覆盖到专属实例（签名仍用 Acuven App 的 secret，专属实例就得持有它）——这会影响阶段 3 的工作量、客户开户流程与密钥边界，列为 Q-10，不在本设计里替 Kelvin 选。
+约束：经 Acuven 的 App 接入的号码，默认 webhook 都到这个 App 的回调地址，也就是 Acuven 的多租户生产实例（§5.1）。所以专属与自托管实例接**客户自己的 Meta App**，直连、不经多租户实例转发（Q-10，与 J-01 停用网关后各自直连的方向一致）；客户自己完成 Meta 的 App 与验证手续，Acuven 人员协助（G-02）。
 
 ## 7. 能力、工具与执行
 
@@ -172,7 +172,7 @@ Demo 实例迁移时生成：一个 `demo` 租户「行业演示」（demo 号�
 - **执行**全部在应用层（E-04）：模型提出调用 → 应用按能力的风险级别与身份要求放行或拦截 → 签名调用业务系统 → 结果回给模型。顾客身份、租户、对话 id、幂等键由应用加进请求，不在模型可填的输入里（契约 §4.3）。
 - **风险级别的执行规则**（契约 §5）：
   - 只读：直接执行。
-  - 低风险写入：执行前要顾客在对话里明确同意。是由代码强制（发确认按钮、顾客点「确认」才调用），还是像现在只写在提示词里，见 Q-19。
+  - 低风险写入：执行前要顾客在对话里明确同意。由代码强制：发确认按钮，顾客点「确认」才调用（Q-19）；Demo 现有本地工具不变。
   - 需人确认：只能「提出」，业务系统返回待确认单号，有权人员在业务系统里确认后回调 Chatbot，再通知顾客（Q-07）。
 - **身份要求**：能力 `requires_customer=true` 时，对话没有有效的顾客身份（网页令牌或渠道核验）就不调用，改为引导登录或核验（R-5.2、R-5.3）。
 - **失败**：超时（默认 8 秒）、5xx、签名错误都如实告诉模型「系统暂时不可用」，由机器人告知顾客并可转人工；不重试写入，除非同一幂等键（N-7）。
@@ -204,7 +204,7 @@ Demo 实例迁移时生成：一个 `demo` 租户「行业演示」（demo 号�
 
 | 通道 | 来源 | 说明 |
 | --- | --- | --- |
-| 手机 App 回音 | aichat | 只对 coexistence 号存在。同事在手机 App 发的消息以回音（`smb_message_echoes`，顾客号码在 `to`）到达，记为同事回复、进入 `human`；自己发出的消息靠 `wamid` 记录排除。回音是否无条件生效（即使该渠道选的是别的接手方式）见 Q-27，推荐无条件生效（R-4.3） |
+| 手机 App 回音 | aichat | 只对 coexistence 号存在。同事在手机 App 发的消息以回音（`smb_message_echoes`，顾客号码在 `to`）到达，记为同事回复、进入 `human`；自己发出的消息靠 `wamid` 记录排除。回音无条件生效，即使该渠道选的是别的接手方式（Q-27，R-4.3） |
 | CRM 收件箱 | 现有 J-04 | 现有签名事件推送与 `/internal/crm/*` 原样保留。阶段 3 起 CRM 按契约接入后，收件箱接口改按契约 §7 的回调规范（同一套签名），见契约 §10 |
 | 自带工作台 | 新增（阶段 2） | 见 §8.4 |
 
@@ -224,17 +224,17 @@ Demo 实例迁移时生成：一个 `demo` 租户「行业演示」（demo 号�
 - **模型上下文**：Redis，按渠道分键（`chat:user:{channel_id}:{号或 BSUID}` 一类，具体在阶段 0 的状态层任务里定），保留期沿用现在的 7 天、20 轮。阶段 0 迁移时现有 `chat:user:*` 一次性改名到 Demo 渠道下，避免进行中的 Demo 对话丢失选中的机器人。
 - **跨渠道归并**（R-1.4）：`customer_link` 记「某渠道顾客在某次对话里核验为某业务系统顾客」及时间；显示时按租户把核验到同一系统顾客的对话放在一起。核验本身的有效期按对话算（契约 §6.3），归并记录不授予后续对话任何访问。
 - **Coexistence 原始数据**：照 aichat 落 JSONL（按实例、渠道、字段、日期分文件），只供排查与将来导入；不进模型上下文。
-- 保留期：见 Q-16 与 §11。
+- 保留期：按租户配置，默认 12 个月；租户停用后 30 天内删除（Q-16，§11）。
 
 ## 10. 计费
 
 - 模型仍由 Chatbot 直接调用（E-17）；每次模型 API 调用产生一条用量事件，写进本地 outbox（建议 MySQL 表，与对话写入同一事务或紧随其后），后台按 `ai_billing_hub` 的接入规范签名上报；上报失败不影响回复（N-2）。
 - **以 `ai_billing_hub` 文档为准，本设计不另定格式**：签名见其 `docs/api.md`「集成请求签名」，上报见「集成：用量事件摄取」（`POST /api/v1/integration/usage-events`，批量 `/usage-events/batch`），字段与重试语义见 `docs/design/AIH-TASK-029-usage-ingest.md`，接入方 Python 包见 `integration-client/README.md`。要点（核对于 2026-11-26，实施时以该仓库当时版本为准）：每个项目一套凭据，绑定一个租户、一个项目；`event_id` 是幂等键，重复上报安全；是否重试只看响应里的 `retryable`，不可重试的进死信并告警；请求里不能带对话内容或费用。
-- **项目划分**（F-08，`ai_billing_hub` 规格 §141「one project corresponds to one module of one product line」）：产品线 = Chatbot，模块 = 该租户用 Chatbot 服务的那个业务场景。建议：公司客服（不嵌系统）、网店、CRM、ERP、Stock Core 各一个模块；一个租户用了几个就在 billing 里建几个项目、发几套凭据（模块怎么划见 Q-23）。
+- **项目划分**（F-08，`ai_billing_hub` 规格 §141「one project corresponds to one module of one product line」）：产品线 = Chatbot，模块 = 该租户用 Chatbot 服务的那个业务场景。公司客服（不嵌系统）、网店、CRM、ERP、Stock Core 各一个模块；一个租户用了几个就在 billing 里建几个项目、发几套凭据（Q-23）。
 - **Acuven 自己**：内部租户，`INTERNAL_METERED_ONLY`（只计量不扣费；F-02 已定 Acuven 自用租户用这个模式）下的「Chatbot × 公司客服」项目。注意该模式要在发凭据、产生用量之前开通（`ai_billing_hub` `docs/design/INTERNAL-METERED-ONLY-2026-10-08.md`）。
-- **Demo 实例**：F-04，内部租户下单独的 Demo 项目；网店样板在同一 Demo 实例上，是否再拆项目随 Q-23。
+- **Demo 实例**：F-04，内部租户下单独的 Demo 项目；Demo 实例整体一个「Chatbot × Demo」项目，网店样板不另拆项目，行业演示与网店样板用用量事件的 `feature` 字段区分（Q-23）。
 - 语音转写（OpenAI）的用量 `ai_billing_hub` 是否支持对应的 `provider`/`usage_type`，阶段 2 开工前去该仓库核对；不支持就先只记本地，不自造类型。
-- **服务状态**（F-05）：预付费（`PREPAID`）客户租户余额用完或被停用时，Chatbot 要知道并停止为该租户调模型。F-05 定了「每次调用前实时查 `effective-status`（`GET /api/v1/integration/effective-status`）只是过渡，webhook 推送加周期对账」，Chatbot 照 `ai_billing_hub` 届时的接入文档实现：本地缓存每个项目的状态，按推送与对账更新，模型调用前只读本地缓存。阶段 1a、2 只有内部租户（`INTERNAL_METERED_ONLY` 不因余额停用，F-02），所以这一项排在阶段 3 第一个预付费客户租户之前；停用时顾客那边看到什么见 Q-26。
+- **服务状态**（F-05）：预付费（`PREPAID`）客户租户余额用完或被停用时，Chatbot 要知道并停止为该租户调模型。F-05 定了「每次调用前实时查 `effective-status`（`GET /api/v1/integration/effective-status`）只是过渡，webhook 推送加周期对账」，Chatbot 照 `ai_billing_hub` 届时的接入文档实现：本地缓存每个项目的状态，按推送与对账更新，模型调用前只读本地缓存。阶段 1a、2 只有内部租户（`INTERNAL_METERED_ONLY` 不因余额停用，F-02），所以这一项排在阶段 3 第一个预付费客户租户之前；停用时回一条固定话术（不调模型）并按该渠道的接手方式转人工（Q-26）。
 - 本地 `console/cost.py` 的硬编码单价只给导演台显示用，不作为计费依据。
 
 ## 11. 安全与隐私
@@ -242,25 +242,25 @@ Demo 实例迁移时生成：一个 `demo` 租户「行业演示」（demo 号�
 - 本仓库公开：真实租户配置与密钥只在库里加密存放（§5.3），仓库只有 Demo 配置（R-8.3、N-1）。
 - 服务间签名、令牌、身份规则见契约 §2、§6。
 - 生产实例没有导演台，也没有「一把令牌看所有租户」的入口；运营命令需要进容器执行。
-- 生产实例的对话保留期、停用租户的删除、顾客要求删除的处理，在 `docs/data-flow-pdpa.md` 的基础上为生产实例另写一份（阶段 1a 上线前），保留期取值见 Q-16。aichat 隐私政策已承诺「停用后 30 天内删除」，合并后必须照做（现在只能手工删）。
+- 生产实例的对话保留期、停用租户的删除、顾客要求删除的处理，在 `docs/data-flow-pdpa.md` 的基础上为生产实例另写一份（阶段 1a 上线前），保留期按租户配置，默认 12 个月（Q-16）。aichat 隐私政策已承诺「停用后 30 天内删除」，合并后必须照做（现在只能手工删）。
 - 发给 Anthropic、OpenAI、Meta 的数据范围不变；业务系统能力返回的个人数据只进本次对话的模型上下文与对话记录。
 
 ## 12. 分阶段
 
 | 阶段 | 内容 | 前提 | 出口 |
 | --- | --- | --- | --- |
-| **0 合并** | 改名；按模板补 `.platform/`、CI、按 SHA 部署、健康检查报 SHA；OpenClaw 登记；实例开关；租户数据模型；按渠道路由；搬 aichat 五项；统一接手状态机与通道接口（含手机 App 回音、CRM 收件箱两个通道）；生产实例空跑 | 本组文档批准；Q-01、Q-03、Q-04、Q-09、Q-12～Q-16、Q-18、Q-21、Q-22、Q-25、Q-27 有答复 | Demo 实例行为不变（R-7.4）；生产实例在线（阶段 0 无公网入口，只在容器网络内健康检查，见 Q-14）、白名单为空不回任何人（R-6.2）；健康检查报 SHA；`onboard check` 为 ready |
-| **1a Acuven 客服上线** | Acuven 租户与机器人配置（aichat 知识 + 需求里缺的 6 类）；停 aichat 容器、`aicustomer.acuventech.com` 切到生产实例；用 Embedded Signup 接入客服号；回音接管真机验收；白名单从测试号放到 `*`；生产实例隐私文档 | aichat 的 Meta 手续：App Review 结果、Access Verification、设置备用号（以 `acuven_aichat/tasks/todo.md` 为准）；Q-02 | 真机验收通过，客服号对所有人回复 |
-| **1b 网店嵌入样板**（与 1a 并行） | Chatbot：网页渠道、可嵌入聊天窗口、身份令牌、契约客户端（清单校验、调用、签名、核验、需人确认回调）；Demo 实例上建「网店样板」租户。网店侧（在 `acuven-shop` 另登任务）：能力清单与调用接口、身份令牌签发、嵌入脚本、渠道核验能力 | Q-05～Q-08、Q-17、Q-19；网店需求文档按本契约修订并经 Kelvin 重新批准（网店规则：改需求即须重批），再登记网店侧任务 | 网店 Demo 上：匿名问商品、会员查自己的订单、申请退款经后台批准（R-3.4、R-5.1） |
+| **0 合并** | 改名；按模板补 `.platform/`、CI、按 SHA 部署、健康检查报 SHA；OpenClaw 登记；实例开关；租户数据模型；按渠道路由；搬 aichat 五项；统一接手状态机与通道接口（含手机 App 回音、CRM 收件箱两个通道）；生产实例空跑 | 已满足：本组文档 2026-11-26 批准，相关问题（Q-01、Q-03、Q-04、Q-09、Q-12～Q-16、Q-18、Q-21、Q-22、Q-25、Q-27）同日答复 | Demo 实例行为不变（R-7.4）；生产实例在线（阶段 0 无公网入口，只在容器网络内健康检查，见 Q-14）、白名单为空不回任何人（R-6.2）；健康检查报 SHA；`onboard check` 为 ready |
+| **1a Acuven 客服上线** | Acuven 租户与机器人配置（aichat 知识 + 需求里缺的 6 类）；停 aichat 容器、`aicustomer.acuventech.com` 切到生产实例；用 Embedded Signup 接入客服号；回音接管真机验收；白名单从测试号放到 `*`；生产实例隐私文档 | aichat 的 Meta 手续：App Review 结果、Access Verification、设置备用号（以 `acuven_aichat/tasks/todo.md` 为准） | 真机验收通过，客服号对所有人回复 |
+| **1b 网店嵌入样板**（与 1a 并行） | Chatbot：网页渠道、可嵌入聊天窗口、身份令牌、契约客户端（清单校验、调用、签名、核验、需人确认回调）；Demo 实例上建「网店样板」租户。网店侧（在 `acuven-shop` 另登任务）：能力清单与调用接口、身份令牌签发、嵌入脚本、渠道核验能力 | 网店需求文档按本契约修订并经 Kelvin 重新批准（网店规则：改需求即须重批），再登记网店侧任务 | 网店 Demo 上：匿名问商品、会员查自己的订单、申请退款经后台批准（R-3.4、R-5.1） |
 | **2 工作台、计费** | 自带工作台（含账号设计），作为第三个接手通道按 §8.2 接口接入；用量上报 `ai_billing_hub` | 工作台账号短设计批准；billing 侧建项目、开通内部计量、发凭据 | 三种接手各自验收；billing 里能看到 Chatbot 各项目用量 |
-| **3 业务系统接入、多租户开户、自托管** | 服务状态同步（F-05，§10）；CRM、ERP 按契约提供能力，Demo 零售机器人切过去并删旧客户端；CRM 收件箱改按契约回调；客户号码经 Embedded Signup 开户；托管专属与自托管打包。Stock Core 等它深度融合（C-21）后期再接，接法见 Q-24 | Q-09～Q-11、Q-24、Q-26；各系统侧任务 | 至少一个外部客户租户上线 |
+| **3 业务系统接入、多租户开户、自托管** | 服务状态同步（F-05，§10）；CRM、ERP 按契约提供能力，Demo 零售机器人切过去并删旧客户端；CRM 收件箱改按契约回调；客户号码经 Embedded Signup 开户；托管专属与自托管打包。Stock Core 等它深度融合（C-21）后期再接，只作为按契约开放能力的业务系统，不新增平台聊天渠道（Q-24） | 各系统侧任务 | 至少一个外部客户租户上线 |
 | **4 客户自助后台** | 客户自己改知识、开关能力、管理工作台账号 | 自助范围另行设计、批准（B-02、G-02） | — |
 
 1a 与 1b 都依赖阶段 0，彼此不依赖（R-6.1）：1a 只用 WhatsApp 渠道与回音接管；1b 只用 Demo 实例。Acuven 官网的网页聊天窗口（匿名、只答知识）在 1b 做出聊天窗口后可以随时加，不算 1a 的出口。
 
 ## 13. 阶段 0 任务拆分草案
 
-按模板「一任务一层（数据库 / 业务规则 / 接口 / 前端）、允许路径是精确文件清单、超过 12 个路径先拆、每个任务合并后都能单独通过检查与 CI」的粒度；部署与平台文件单列「部署」「平台」。**只是草案，不写进 `.platform/`**；编号前缀随 Q-01（暂写 `CHAT-0xx`），登记时按当时代码重新核对路径（尤其是 013、015、016 的调用方清单与测试文件）。
+按模板「一任务一层（数据库 / 业务规则 / 接口 / 前端）、允许路径是精确文件清单、超过 12 个路径先拆、每个任务合并后都能单独通过检查与 CI」的粒度；部署与平台文件单列「部署」「平台」。**只是草案，不写进 `.platform/`**；登记时编号为 `CHAT-TASK-NNN`（Q-01，OpenClaw `project_id` 为 `chatbot`），下表简写为 `CHAT-0xx`，登记时按当时代码重新核对路径（尤其是 013、015、016 的调用方清单与测试文件）。
 
 - **实现方**：「会话」= 在本仓库的会话里实现、开 PR；「Worker」= 登记后可交 OpenClaw。001～004 在 OpenClaw 登记之前，只能由会话做；改部署工作流、部署脚本的任务也由会话做；`.platform/` 路径控制面一律拒收（`acuven-openclaw-control-plane/worker/paths.py`）。
 - 路径名避开控制面的敏感词规则（文件名里不能含 `secret`、`key`、`token` 等词，不能是 `.env*`）。
@@ -272,7 +272,7 @@ Demo 实例迁移时生成：一个 `demo` 租户「行业演示」（demo 号�
 | CHAT-001 | 部署 | 会话 | 健康检查报出提交 SHA（构建时注入） | `backend/app/main.py`、`backend/Dockerfile`、`backend/tests/test_health.py` | `/health` 返回 `commit`；未注入时的值有测试 | — |
 | CHAT-002 | 部署 | 会话 | 新增 CI：`unit`（后端 pytest，Python 版本与镜像一致）、`frontend`（构建） | `.github/workflows/ci.yml` | PR 上两个 job 绿；job 名与 `required_status_checks` 一致 | — |
 | CHAT-003 | 部署 | 会话 | 部署工作流达到 D1–D5：部署 `DEPLOY_SHA`、上线后健康检查核对 SHA、`cancel-in-progress: false`、`timeout-minutes` ≤ 25；保留主机部署锁 | `.github/workflows/deploy.yml`、`deploy/healthcheck.sh`、`docker-compose.prod.yml` | 真实部署后健康检查报出该 SHA；容器起不来时工作流红 | 001 |
-| CHAT-004 | 平台 | 会话 | `.platform/` 三文件（`tasks.yaml` 默认 deny）、planning-v1 计划块（文件位置随 Q-25）、`CLAUDE.md`/`AGENTS.md` 补模板规则块（保留本仓库已有约定） | `.platform/project.yaml`、`.platform/commands.yaml`、`.platform/tasks.yaml`、`docs/TODO.md`、`CLAUDE.md`、`AGENTS.md` | `contract_check` / `onboard check` 为 ready | 002、003；Q-01、Q-21、Q-25 |
+| CHAT-004 | 平台 | 会话 | `.platform/` 三文件（`tasks.yaml` 默认 deny）、planning-v1 计划块放新建的 `docs/TODO.md`，`tasks/todo.md` 冻结为历史（Q-25）、`CLAUDE.md`/`AGENTS.md` 补模板规则块（保留本仓库已有约定） | `.platform/project.yaml`、`.platform/commands.yaml`、`.platform/tasks.yaml`、`docs/TODO.md`、`CLAUDE.md`、`AGENTS.md` | `contract_check` / `onboard check` 为 ready | 002、003；Q-01、Q-21、Q-25 |
 | CHAT-005 | 业务规则 | Worker | 实例开关 `CHATBOT_ENV`：`production` 下不挂 §4「仅 Demo」的路由与任务，相关配置被设置时拒启动；未设置拒启动 | `backend/app/config.py`、`backend/app/instance.py`、`backend/app/main.py`、`backend/tests/test_instance.py` | 两种取值下的路由表测试；未设置拒启动。**合并前** Demo 的 `backend/.env` 已加 `CHATBOT_ENV=demo`（§14） | 003 |
 | CHAT-006 | 数据库 | Worker | 引入 Alembic：基线迁移接管现有三张审计表（不存在则按现有结构建，已存在不动）；建 `chatbot_instance` 与租户各表（§5.1）；启动时核对实例记录 | `backend/requirements.txt`、`backend/alembic.ini`、`backend/migrations/env.py`、`backend/migrations/versions/0001_baseline.py`、`backend/migrations/versions/0002_tenancy.py`、`backend/app/tenancy/models.py`、`backend/app/tenancy/db.py`、`backend/tests/test_migrations.py`、`backend/tests/test_tenancy_models.py` | 空库与「已有审计表的库」都能迁到最新；实例记录不一致拒启动 | 005；Q-15 |
 | CHAT-007 | 部署 | 会话 | 部署时先跑 `alembic upgrade head`，失败则不切容器、工作流红 | `.github/workflows/deploy.yml`、`deploy/migrate.sh` | 真实部署跑通迁移；故意失败时旧容器保持运行 | 006 |
