@@ -1,9 +1,37 @@
 name: Deploy
 
+# Deploy observation contract (acuven-project-template TEMPLATE-GUIDE section 4):
+# D1 a push to master triggers it; D2 it deploys DEPLOY_SHA, the commit that
+# triggered it, by its own image tags, not whatever `latest` or a `git pull`
+# happens to be; D3 it is green only once /health reports that SHA; D4 a
+# running deploy is never cancelled; D5 it finishes within 25 minutes.
 on:
   push:
     branches:
       - master
+    # Auto-closeout: OpenClaw's closeout PRs touch only these two files and
+    # must not trigger a deploy. Keep this a plain list of exact paths: no
+    # `paths`, no `branches-ignore`, no `!` entries, anchors or aliases, or the
+    # Worker refuses to merge the closeout PR.
+    paths-ignore:
+      - .platform/tasks.yaml
+      - docs/TODO.md
+  workflow_dispatch:
+    inputs:
+      ref:
+        # Rollback floor: the commit that brought in this workflow (CHAT-003). An
+        # older one has no /health behind the frontend, so its deploy goes red,
+        # and before bea749a its nginx could reach other projects' backends.
+        description: "Full 40-character commit SHA to deploy (for a rollback, the last good one; no older than CHAT-003)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 env:
   BACKEND_IMAGE: ghcr.io/${{ github.repository }}-backend
@@ -13,9 +41,24 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
+      - name: Resolve the commit to deploy
+        id: resolve
+        env:
+          REF: ${{ inputs.ref || github.sha }}
+        shell: bash
+        run: |
+          if [[ ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::ref must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          echo "sha=$REF" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.sha }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -29,9 +72,11 @@ jobs:
         with:
           context: ./backend
           push: true
+          build-args: |
+            GIT_SHA=${{ steps.resolve.outputs.sha }}
           tags: |
             ${{ env.BACKEND_IMAGE }}:latest
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:${{ steps.resolve.outputs.sha }}
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
@@ -40,7 +85,7 @@ jobs:
           push: true
           tags: |
             ${{ env.FRONTEND_IMAGE }}:latest
-            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.resolve.outputs.sha }}
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -66,11 +111,62 @@ jobs:
             # instead (flock works on it) without a failed open ending the shell.
             { command exec 9>>/run/lock/acuven-deploy.lock; } 2>/dev/null || { command exec 9</run/lock/acuven-deploy.lock; } 2>/dev/null || { echo "cannot open the host deploy lock; nothing has been changed"; exit 1; }
             flock -n 9 || { echo "another deploy holds the host lock ($(head -1 /run/lock/acuven-deploy.lock 2>/dev/null)); waiting up to 300s"; flock -w 300 9; } || { echo "the host deploy lock was not free within 300s; nothing has been changed (re-run this job)"; exit 1; }
-            printf '%s %s pid=%s since=%s\n' ai_chatbot_demo "${{ github.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
+            printf '%s %s pid=%s since=%s\n' ai_chatbot_demo "${{ steps.resolve.outputs.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
             echo "holding the host deploy lock"
             cd ${{ env.VPS_DEPLOY_PATH }}
-            git pull origin master
+            # The commit of the last attempted deploy (usually the one running); its
+            # images are kept below for a quick rollback. The checkout is detached at
+            # each deployed commit (read it with `git rev-parse HEAD`; a `git pull`
+            # here fails on the detached HEAD, which is intended).
+            prev_sha="$(git rev-parse HEAD)"
+            # The compose file comes from the deployed commit itself (D2), not the
+            # branch tip: a later push must not change what this run starts.
+            git fetch -q origin master
+            git checkout -q --detach "${{ steps.resolve.outputs.sha }}"
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # The images are named here, by this commit's tags, rather than read from
+            # BACKEND_IMAGE / FRONTEND_IMAGE in this directory's .env: a variable set
+            # in the shell wins over the .env file, so a stale or renamed image there
+            # cannot be what gets started.
+            export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${{ steps.resolve.outputs.sha }}" FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ steps.resolve.outputs.sha }}"
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
+            # Only once the new containers are up: point .env at the same images, so a
+            # compose command run by hand here later starts this version, not whatever
+            # .env named before (images are no longer pulled as `latest`).
+            if grep -q '^BACKEND_IMAGE=' .env; then sed -i "s#^BACKEND_IMAGE=.*#BACKEND_IMAGE=$BACKEND_IMAGE#" .env; else echo "the new version is running, but .env has no BACKEND_IMAGE line to update; fix .env by hand"; exit 1; fi
+            if grep -q '^FRONTEND_IMAGE=' .env; then sed -i "s#^FRONTEND_IMAGE=.*#FRONTEND_IMAGE=$FRONTEND_IMAGE#" .env; else echo "the new version is running, but .env has no FRONTEND_IMAGE line to update; fix .env by hand"; exit 1; fi
+            # Images are tagged by commit now, so an old one never goes dangling and
+            # `prune -f` alone would keep them all. Remove this project's tags other
+            # than this commit and the previous one. Never `prune -a`: it would take
+            # other projects' images on this shared host.
+            docker images "${{ env.BACKEND_IMAGE }}" --filter dangling=false --format '{{.Repository}}:{{.Tag}}' | grep -v -e ":${{ steps.resolve.outputs.sha }}$" -e ":$prev_sha$" | xargs -r docker rmi >/dev/null || echo "some old backend images could not be removed; continuing"
+            docker images "${{ env.FRONTEND_IMAGE }}" --filter dangling=false --format '{{.Repository}}:{{.Tag}}' | grep -v -e ":${{ steps.resolve.outputs.sha }}$" -e ":$prev_sha$" | xargs -r docker rmi >/dev/null || echo "some old frontend images could not be removed; continuing"
             docker image prune -f
+
+      # D3: green only when the public URL, through infra_nginx and the frontend's
+      # nginx, is answered by the backend this run just started. Going through the
+      # whole chain is the point: on 2026-11-26 every container came up and the
+      # deploy was green while /api and /webhook reached other projects' backends.
+      - name: Post-deploy health check
+        env:
+          DEPLOY_SHA: ${{ steps.resolve.outputs.sha }}
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+        shell: bash
+        run: |
+          if [ -z "$HEALTHCHECK_URL" ]; then
+            echo "::error::repository variable HEALTHCHECK_URL is not set"
+            exit 1
+          fi
+          # About 6 minutes at most (24 x (5s curl + 10s sleep)), which with the
+          # build and the 13-minute SSH budget stays inside the 25-minute timeout.
+          for attempt in $(seq 1 24); do
+            body="$(curl --silent --show-error --fail --max-time 5 "$HEALTHCHECK_URL" || true)"
+            if [[ "$body" == *"\"commit\":\"$DEPLOY_SHA\""* ]]; then
+              echo "healthy on attempt $attempt"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::health check did not report $DEPLOY_SHA after $attempt attempts (last body: ${body:0:200})"
+          exit 1
