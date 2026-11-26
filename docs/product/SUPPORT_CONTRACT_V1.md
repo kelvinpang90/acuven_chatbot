@@ -18,6 +18,8 @@
 
 一次「接入」= Chatbot 实例里的一条 integration 记录（DESIGN §5.1）：一个租户 × 一个业务系统部署，带业务系统地址、两个方向的签名密钥、业务系统给这个租户的标识 `tenant_ref`。
 
+**密钥由谁签发**：接入时由 Acuven 人员用 Chatbot 的运营命令生成两把密钥（Chatbot → 业务系统、业务系统 → Chatbot），Chatbot 一侧加密存库；业务系统一侧由同一位运营者经安全渠道放进业务系统的环境配置（不进任何仓库、不经聊天或邮件明文）。轮换同样由运营命令发起，新旧并存期间两把都认。
+
 ## 2. 服务间签名
 
 两个方向（Chatbot → 业务系统；业务系统 → Chatbot 的回调）都签名，**每个方向一把独立密钥**，每把支持新旧两把并存以便轮换（J-04 已是这个做法）。
@@ -74,7 +76,27 @@
       "description": "Submit a refund request for items of the customer's own paid order. Staff review it in the shop admin.",
       "risk": "write_confirm",
       "requires_customer": true,
-      "input_schema": { "...": "..." }
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "order_no": { "type": "string", "maxLength": 32 },
+          "items": {
+            "type": "array", "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "order_item_id": { "type": "string", "maxLength": 32 },
+                "quantity": { "type": "integer", "minimum": 1 }
+              },
+              "required": ["order_item_id", "quantity"],
+              "additionalProperties": false
+            }
+          },
+          "reason": { "type": "string", "maxLength": 300 }
+        },
+        "required": ["order_no", "items"],
+        "additionalProperties": false
+      }
     }
   ]
 }
@@ -91,7 +113,7 @@
 | `risk` | `read`（只读）/ `write_low`（低风险写入）/ `write_confirm`（需人确认）。系统按 E-05 自己定级：退款、改价、调库存、取消已付款订单一类必须是 `write_confirm` |
 | `requires_customer` | `true` 时只有对话带有效顾客身份才会被调用（§6） |
 | `confirmable` | 可选，仅 `write_low` 有意义：`true` 表示这项能力也支持 §5.3 的「提出—确认」模式，租户才能把它收紧成 `write_confirm` |
-| `input_schema` | JSON Schema 子集：顶层 `object`、`additionalProperties: false`；属性类型限 `string`（须有 `maxLength`）、`integer`、`number`、`boolean`、`enum`、元素为上述标量的 `array`（须有 `maxItems`）；不允许 `$ref`、不允许出现 §4.3 的保留字段名 |
+| `input_schema` | JSON Schema 子集：顶层 `object`、`additionalProperties: false`；属性类型限 `string`（须有 `maxLength`）、`integer`、`number`、`boolean`、`enum`、`array`（须有 `maxItems`）。`array` 的元素可以是上述标量，或**一层**对象（对象的属性只能是标量，同样 `additionalProperties: false`），用来表达「商品 + 数量」这类成组输入；不允许更深的嵌套、不允许 `$ref`；任何层级都不能出现 §4.3 的保留字段名 |
 | `identity.verify` | 该系统提供的渠道核验能力名（§6.2），这些能力的 `risk` 必须是 `read`，且 `requires_customer: false` |
 
 ## 4. 调用
@@ -105,6 +127,7 @@
   "contract_version": "1.0",
   "invocation_id": "0193b1f2-....",
   "tenant_ref": "acuven-shop-demo",
+  "source": { "service": "acuven-chatbot", "instance": "demo" },
   "conversation": { "id": "c_...", "channel": "webchat", "locale": "zh" },
   "customer": { "subject": "member:1024", "verified_via": "webchat_token", "verified_at": "2026-11-26T08:00:00Z" },
   "input": { "order_no": "AS-20261126-0007" }
@@ -112,6 +135,7 @@
 ```
 
 - `invocation_id`：UUIDv7，Chatbot 生成，是幂等键。
+- `source`：调用来源（E-04「写操作带来源」）：`service` 固定为 `acuven-chatbot`，`instance` 为 `demo` 或 `production`。业务系统应把它与 `invocation_id`、`conversation.id` 一起写进自己的审计记录。
 - `customer`：没有有效身份时为 `null`。`subject` 是业务系统自己的顾客标识（由令牌或核验得来，§6），Chatbot 原样回传，不解释。
 - `input`：模型给出的参数，已按 `input_schema` 校验。
 
@@ -123,7 +147,8 @@
 | --- | --- | --- |
 | `ok` | 完成 | `data`（给模型看的结果，JSON，≤ 16 KB）、可选 `display`（给顾客看的简短文字） |
 | `pending_confirmation` | 已提出，等有权人员确认（只对 `write_confirm`） | `pending_id`、`summary`（具体变更的人话描述，会原样给顾客看）|
-| `verified` | 核验成功（只对核验能力） | `subject`、可选 `display_name` |
+| `verified` | 核验成功（只对凭据核验能力） | `subject`、可选 `display_name` |
+| `link_issued` | 已生成登录链接（只对登录链接核验能力） | `url`（一次性）、`expires_at`；结果经 §7.2 回调 |
 | `error` | 业务上不成 | `error.code`、`error.message`（可给顾客看）、`error.retryable` |
 
 `error.code` 取值：`INVALID_INPUT`、`NOT_FOUND`、`NOT_ALLOWED`（例如订单不属于这个顾客）、`CUSTOMER_REQUIRED`、`VERIFY_FAILED`、`CONFLICT`、`UNAVAILABLE`。

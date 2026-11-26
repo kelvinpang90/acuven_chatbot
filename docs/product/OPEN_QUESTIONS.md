@@ -31,11 +31,14 @@
 | Q-17 | 网店样板放在 Demo 实例的哪个渠道 | ① 只网页聊天窗口 | 1b |
 | Q-18 | 企业微信渠道与已停用网关入口怎么处理 | ① 删网关入口；企业微信保留、仅 Demo | 0 |
 | Q-19 | 低风险写入执行前是否由代码强制顾客确认 | ① 强制（新能力），Demo 旧工具不变 | 1b |
-| Q-20 | Acuven 自己在 `ai_billing_hub` 的计费模式 | ① `INTERNAL_METERED_ONLY` | 2 |
+| Q-20 | （撤回：F-02 已定 Acuven 自用租户用 `INTERNAL_METERED_ONLY`） | — | — |
 | Q-21 | 分支保护与 PR 合并分工 | ① 照 Stock Core：独立审查 + CI 绿后实现会话合并 | 0 |
 | Q-22 | 生产实例用哪个 Meta App | ① aichat 的 `Acuven Customer Service` | 0、1a |
 | Q-23 | 计费项目里的「模块」怎么划分 | ① 按业务场景，一租户可多项目 | 2 |
 | Q-24 | 「嵌进 Inventory / Stock Core」指什么 | ② 只是 Stock Core 开放能力 | 3 |
+| Q-25 | OpenClaw 的 planning-v1 计划块放哪，与 `tasks/todo.md` 的约定怎么共存 | ① 新建 `docs/TODO.md`，`tasks/todo.md` 冻结为历史 | 0 |
+| Q-26 | 预付费客户租户被停用时，顾客那边看到什么 | ② 固定话术 + 转人工 | 3 |
+| Q-27 | coexistence 号选了别的接手方式时，手机 App 回音是否也让 AI 让位 | ① 一律让位 | 0 |
 
 ## 2. 逐条
 
@@ -112,7 +115,8 @@ Acuven 自己目前没有可接的业务系统：`acuven_crm_demo` 是 demo，�
 - ① **客户自己的 Meta App**：专属/自托管实例直连客户的 App（客户自己完成 Meta 的 App 与验证手续，Acuven 人员协助，G-02）。
 - ② 用 Acuven 的 App，由多租户实例把该号码的 webhook 转发给专属/自托管实例。
 - ③ 专属/自托管首期只提供网页聊天，WhatsApp 以后再说。
-- **推荐 ①**：与 J-01 停用网关后「各自直连 Meta」的方向一致，没有单点转发；代价是客户开户手续重。这条到阶段 3 才需要，可以先不答。落到：DESIGN §6、R-2.4。
+- ④ 用 Acuven 的 App，但按 WABA 或号码把回调地址覆盖到专属/自托管实例（Meta 有 `override_callback_uri` 一类做法，**本设计未核实**）。签名仍用 Acuven App 的 app secret，专属/自托管实例就得持有它，自托管尤其不合适。
+- **推荐 ①**：与 J-01 停用网关后「各自直连 Meta」的方向一致，没有单点转发，密钥边界清楚；代价是客户开户手续重。④ 对 Acuven 托管的专属实例或许可行，阶段 3 前先核实 Meta 文档再定。这条到阶段 3 才需要，可以先不答。落到：DESIGN §5.1、§6、R-2.4。
 
 ### Q-11 自托管实例的模型用量怎么计费
 
@@ -126,32 +130,32 @@ Acuven 自己目前没有可接的业务系统：`acuven_crm_demo` 是 demo，�
 - ① **同一部署工作流、同一 SHA：Demo 先部署并健康检查通过，再部署生产**。
 - ② 生产手动触发（合并后只自动部署 Demo）。
 - ③ 两个独立工作流各自触发。
-- **推荐 ①**：模板 D1 要求合并即部署；生产在 1a 之前是空跑，风险低。有真实租户后若想加人工闸门再改 ②。落到：CHAT-003、CHAT-017。
+- **推荐 ①**：模板 D1 要求合并即部署；生产在 1a 之前是空跑，风险低。有真实租户后若想加人工闸门再改 ②。落到：CHAT-003、CHAT-025。
 
 ### Q-13 改名后 VPS 目录、容器、库名改不改
 
 - ① **现有 Demo 实例的 `/opt/ai_chatbot`、容器名、`ai_chatbot`/`ai_chatbot_verticals` 库、Redis db16 都不改**；GHCR 镜像名随仓库名变（工作流用 `github.repository` 拼镜像名，VPS 上 `/opt/ai_chatbot/.env` 的镜像变量要同步改）。生产实例从一开始用新名字。
 - ② 全部改成新名字。
-- **推荐 ①**：照 `crm_os` 改名为 `acuven_crm_demo` 时的先例，改名只影响仓库；②要停机迁库、改 nginx，换不来功能。落到：CHAT-003、CHAT-017、DESIGN §4。
+- **推荐 ①**：照 `crm_os` 改名为 `acuven_crm_demo` 时的先例，改名只影响仓库；②要停机迁库、改 nginx，换不来功能。落到：CHAT-003、CHAT-025、DESIGN §4。
 
 ### Q-14 生产实例的域名、Redis、MySQL
 
 - ① **`aicustomer.acuventech.com`**（aichat 的 Meta App 回调已经指向它，换实例时 Meta 侧不用改）**+ Redis db17（aichat 现用）+ 共享 infra_mysql 里的新库**（库名随 Q-01）。
 - ② 新域名，Meta App 回调地址同步改。
-- **推荐 ①**：Meta 侧零改动。aichat 容器停用前，两个服务不能同时接这个域名——切换时点放在 1a。落到：CHAT-017。
+- **推荐 ①**：Meta 侧零改动。aichat 容器停用前，两个服务不能同时接这个域名，所以**阶段 0 的生产实例没有公网入口**（像 Demo Core 那样只在容器网络内做健康检查），1a 停 aichat 容器时再把这个域名切到生产实例。落到：CHAT-025、DESIGN §12、§14。
 
 ### Q-15 新表用不用 Alembic
 
-- ① **用**：新表（租户、渠道、实例记录、用量 outbox）用 Alembic；现有 `audit.py`、`verticals/` 的 `CREATE TABLE IF NOT EXISTS` 不动。对话表加列（CHAT-012）也走 Alembic。
+- ① **用**：新表（租户、渠道、实例记录、用量 outbox）用 Alembic；`verticals/` 的 `CREATE TABLE IF NOT EXISTS` 不动；审计三张表由 Alembic 基线迁移接管（不存在则建、已存在不动），`audit.py` 的运行时建表在 CHAT-017 去掉。对话表加列（CHAT-017）也走 Alembic。
 - ② 继续 `CREATE TABLE IF NOT EXISTS`。
-- **推荐 ①**：租户表会随阶段演进，要可回溯的迁移；模板、网店、Stock Core 都用 Alembic。落到：CHAT-006、CHAT-012。
+- **推荐 ①**：租户表会随阶段演进，要可回溯的迁移；模板、网店、Stock Core 都用 Alembic。落到：CHAT-006、CHAT-017。
 
 ### Q-16 生产实例的对话保留期
 
 - ① **按租户配置，默认 12 个月**；租户停用后 30 天内删除其全部对话与原始落盘数据（沿用 aichat 隐私政策已作的承诺）；Demo 实例维持现状。
 - ② 默认 90 天。
 - ③ 不设，手工删除。
-- **推荐 ①**：客服回看半年到一年前的对话是常见需要；③违反 aichat 已公布的承诺。具体期限是合规与商业判断，请 Kelvin 定。落到：DESIGN §9、§11，CHAT-015。
+- **推荐 ①**：客服回看半年到一年前的对话是常见需要；③违反 aichat 已公布的承诺。具体期限是合规与商业判断，请 Kelvin 定。落到：DESIGN §9、§11，CHAT-022。
 
 ### Q-17 网店样板放在 Demo 实例的哪个渠道
 
@@ -174,11 +178,9 @@ Acuven 自己目前没有可接的业务系统：`acuven_crm_demo` 是 demo，�
 - ② 只靠提示词。
 - **推荐 ①**：E-04 要求写入由应用控制；顾客侧写入（下单、改预约）是真实动作，不该只靠模型自觉。落到：契约 §5.2、1b。
 
-### Q-20 Acuven 自己在 `ai_billing_hub` 的计费模式
+### Q-20 （撤回）Acuven 自己在 `ai_billing_hub` 的计费模式
 
-- ① **`INTERNAL_METERED_ONLY`**：只计量、不扣费、不写钱包账，正是 OWNER 文档为 Acuven 自用租户设的模式。
-- ② `PREPAID` 测试钱包。
-- **推荐 ①**。注意该模式必须在发凭据、产生用量之前开通（`ai_billing_hub` `docs/design/INTERNAL-METERED-ONLY-2026-10-08.md`）。落到：DESIGN §10、阶段 2。
+- **撤回，不需答复**：审查时发现 F-02 已经定了「只有 Acuven 自用租户设为 `INTERNAL_METERED_ONLY`」。保留编号只为不打乱其它引用。落到：DESIGN §10。
 
 ### Q-21 分支保护与 PR 合并分工
 
@@ -210,6 +212,31 @@ E-21 把 Inventory（现为 Stock Core 生产实例的平台渠道能力，C-21�
 - ② **只是 Stock Core 按契约开放能力**（如查库存、查平台订单状态），供网店等租户的机器人在 WhatsApp、网页上调用；不新增平台聊天渠道。
 - ③ 两者都要。
 - **推荐 ②**：①是一条新的渠道线，取决于平台审批，工作量与风险都在 E-21 设想之外；如果 Kelvin 的本意是 ①，需要另开一组需求。这条到阶段 3 才需要。落到：契约 §10、DESIGN §12 阶段 3。
+
+### Q-25 OpenClaw 的 planning-v1 计划块放哪
+
+模板要求一个 planning-v1 计划文件（默认 `docs/TODO.md`，可以换路径，`TEMPLATE-GUIDE.md` §5）；本仓库现在的编号任务约定在 `tasks/todo.md`（约 3,800 行，批次 1～11 的计划与记录，「一个 session 一个编号任务」）。两套并存会出现同一件事两处登记。
+
+- ① **新建 `docs/TODO.md` 放 planning-v1；`tasks/todo.md` 冻结为批次 1～11 的历史**，此后的任务只在 `.platform/tasks.yaml` 与 `docs/TODO.md` 登记；`CLAUDE.md` 的「任务管理」一节相应改写。
+- ② 把 planning-v1 块放进 `tasks/todo.md` 顶部（登记时加 `--planning tasks/todo.md`），两套约定写在同一文件里。
+- **推荐 ①**：与模板、网店、Stock Core 一致，新会话不用读 3,800 行历史；历史记录原样保留可查。落到：CHAT-004、`CLAUDE.md`/`AGENTS.md`。
+
+### Q-26 预付费客户租户被停用时，顾客那边看到什么
+
+F-05 要求 Chatbot 跟随 `ai_billing_hub` 的服务状态（DESIGN §10）。租户余额用完或被停用时：
+
+- ① 完全不回复。
+- ② **回一条固定话术（不调模型），并转人工**（按该渠道的接手方式通知同事）。
+- ③ 只转人工，不回话术。
+- **推荐 ②**：顾客不会以为消息丢了，租户的同事仍能接手；话术不调模型，不产生费用。阶段 3 才需要。落到：DESIGN §10。
+
+### Q-27 coexistence 号选了别的接手方式时，手机 App 回音是否也让 AI 让位
+
+coexistence 号上同事随时可以在手机 App 里直接回顾客。假设某渠道选的接手方式是 CRM 收件箱或工作台，而同事仍在手机上回了：
+
+- ① **一律让位**：任何一次手机回复都让 AI 静默（计时同 §8.1），与接手方式无关。
+- ② 只有选了「手机 App 回音」的渠道才让位；其它渠道上手机回复只记录，AI 照常回。
+- **推荐 ①**：同事已经在跟顾客说话时 AI 还插话，顾客会收到两套说法；①不妨碍④「按客户选」——选的是同事主要在哪里收消息、回消息，手机回复只是多一个让位的触发。落到：R-4.3、DESIGN §3、§8.3、CHAT-020。
 
 ## 3. 答复记录
 
