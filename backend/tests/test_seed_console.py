@@ -603,9 +603,12 @@ def test_an_unreachable_erp_clears_nothing(capsys):
         "crm_password": "secret",
     }
     down = FakeErp(down=True)
+    # A fake CRM, as in the test below: with the CRM settings given, main() builds
+    # its client before reading the ERP, and the real one would outlive this test
+    # as a configured singleton.
     with patch.multiple(settings, **urls), patch.object(erp_client, "client", lambda: down), patch.object(
-        seed_documents, "clear"
-    ) as clear_documents, patch.object(seed_console, "reseed") as reseed:
+        crm_client, "client", FakeCrm
+    ), patch.object(seed_documents, "clear") as clear_documents, patch.object(seed_console, "reseed") as reseed:
         assert seed_console.main([]) == 1
     clear_documents.assert_not_called()
     reseed.assert_not_called()
