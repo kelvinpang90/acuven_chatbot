@@ -19,7 +19,10 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Full 40-character commit SHA to deploy (for a rollback, the last good one)"
+        # Rollback floor: the commit that brought in this workflow (CHAT-003). An
+        # older one has no /health behind the frontend, so its deploy goes red,
+        # and before bea749a its nginx could reach other projects' backends.
+        description: "Full 40-character commit SHA to deploy (for a rollback, the last good one; no older than CHAT-003)"
         required: true
 
 permissions:
@@ -111,6 +114,11 @@ jobs:
             printf '%s %s pid=%s since=%s\n' ai_chatbot_demo "${{ steps.resolve.outputs.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
             echo "holding the host deploy lock"
             cd ${{ env.VPS_DEPLOY_PATH }}
+            # The commit running until now; its images are kept below for a quick
+            # rollback. The checkout is detached at each deployed commit, so HEAD
+            # is the last deploy (read the version with `git rev-parse HEAD`; a
+            # `git pull` here fails on the detached HEAD, which is intended).
+            prev_sha="$(git rev-parse HEAD)"
             # The compose file comes from the deployed commit itself (D2), not the
             # branch tip: a later push must not change what this run starts.
             git fetch -q origin master
@@ -123,6 +131,16 @@ jobs:
             export BACKEND_IMAGE="${{ env.BACKEND_IMAGE }}:${{ steps.resolve.outputs.sha }}" FRONTEND_IMAGE="${{ env.FRONTEND_IMAGE }}:${{ steps.resolve.outputs.sha }}"
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
+            # Only once the new containers are up: point .env at the same images, so a
+            # compose command run by hand here later starts this version, not whatever
+            # .env named before (images are no longer pulled as `latest`).
+            if grep -q '^BACKEND_IMAGE=' .env; then sed -i "s#^BACKEND_IMAGE=.*#BACKEND_IMAGE=$BACKEND_IMAGE#" .env; else echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> .env; fi
+            if grep -q '^FRONTEND_IMAGE=' .env; then sed -i "s#^FRONTEND_IMAGE=.*#FRONTEND_IMAGE=$FRONTEND_IMAGE#" .env; else echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> .env; fi
+            # Images are tagged by commit now, so an old one never goes dangling and
+            # `prune -f` alone would keep them all. Remove this project's tags other
+            # than this commit and the previous one. Never `prune -a`: it would take
+            # other projects' images on this shared host.
+            docker images --format '{{.Repository}}:{{.Tag}}' | grep -F -e "${{ env.BACKEND_IMAGE }}:" -e "${{ env.FRONTEND_IMAGE }}:" | grep -v -e ":${{ steps.resolve.outputs.sha }}$" -e ":$prev_sha$" | xargs -r docker rmi >/dev/null 2>&1 || echo "some old images of this project could not be removed; continuing"
             docker image prune -f
 
       # D3: green only when the public URL, through infra_nginx and the frontend's
@@ -139,13 +157,15 @@ jobs:
             echo "::error::repository variable HEALTHCHECK_URL is not set"
             exit 1
           fi
-          for attempt in $(seq 1 30); do
-            body="$(curl --silent --show-error --fail --max-time 10 "$HEALTHCHECK_URL" || true)"
+          # About 6 minutes at most (24 x (5s curl + 10s sleep)), which with the
+          # build and the 13-minute SSH budget stays inside the 25-minute timeout.
+          for attempt in $(seq 1 24); do
+            body="$(curl --silent --show-error --fail --max-time 5 "$HEALTHCHECK_URL" || true)"
             if [[ "$body" == *"\"commit\":\"$DEPLOY_SHA\""* ]]; then
               echo "healthy on attempt $attempt"
               exit 0
             fi
             sleep 10
           done
-          echo "::error::health check did not report $DEPLOY_SHA within 5 minutes (last body: ${body:0:200})"
+          echo "::error::health check did not report $DEPLOY_SHA after $attempt attempts (last body: ${body:0:200})"
           exit 1
