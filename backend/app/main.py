@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.config import settings
 from app.routers.chat import router as chat_router
 from app.routers.console import router as console_router
 from app.routers.internal_crm import router as internal_crm_router
@@ -40,4 +41,4 @@ app.include_router(saas_router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "commit": settings.git_sha or "unknown"}

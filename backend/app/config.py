@@ -45,6 +45,11 @@ class CrmTemplate(BaseModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+    # The commit this image was built from, baked in by backend/Dockerfile's
+    # GIT_SHA build arg. /health reports it so the deploy workflow can tell the
+    # new version is the one answering.
+    git_sha: str = "unknown"
+
     anthropic_api_key: str = ""
     # The model every bot answers with, unless a bot's JSON names one of its own.
     # Haiku by default (2026-09-14, the owner's call on cost): about a fifth of
