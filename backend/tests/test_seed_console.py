@@ -596,6 +596,11 @@ def test_an_unreachable_erp_clears_nothing(capsys):
         "mysql_url": "mysql://u:p@db:3306/chat",
         "redis_url": "redis://r:6379/0",
         "verticals_mysql_url": "mysql://u:p@db:3306/verticals",
+        # main() refuses before the ERP is read without these; set them here
+        # rather than leaning on whatever a developer's backend/.env holds.
+        "crm_base_url": "https://crm.example.com",
+        "crm_email": "demo@example.com",
+        "crm_password": "secret",
     }
     down = FakeErp(down=True)
     with patch.multiple(settings, **urls), patch.object(erp_client, "client", lambda: down), patch.object(
@@ -884,6 +889,11 @@ def test_an_unreachable_erp_clears_no_crm_rows(crm):
         "mysql_url": "mysql://u:p@db:3306/chat",
         "redis_url": "redis://r:6379/0",
         "verticals_mysql_url": "mysql://u:p@db:3306/verticals",
+        # main() refuses before the ERP is read without these; set them here
+        # rather than leaning on whatever a developer's backend/.env holds.
+        "crm_base_url": "https://crm.example.com",
+        "crm_email": "demo@example.com",
+        "crm_password": "secret",
     }
     _two_kinds(crm)
     down = FakeErp(down=True)
