@@ -596,11 +596,19 @@ def test_an_unreachable_erp_clears_nothing(capsys):
         "mysql_url": "mysql://u:p@db:3306/chat",
         "redis_url": "redis://r:6379/0",
         "verticals_mysql_url": "mysql://u:p@db:3306/verticals",
+        # main() refuses before the ERP is read without these; set them here
+        # rather than leaning on whatever a developer's backend/.env holds.
+        "crm_base_url": "https://crm.example.com",
+        "crm_email": "demo@example.com",
+        "crm_password": "secret",
     }
     down = FakeErp(down=True)
+    # A fake CRM, as in the test below: with the CRM settings given, main() builds
+    # its client before reading the ERP, and the real one would outlive this test
+    # as a configured singleton.
     with patch.multiple(settings, **urls), patch.object(erp_client, "client", lambda: down), patch.object(
-        seed_documents, "clear"
-    ) as clear_documents, patch.object(seed_console, "reseed") as reseed:
+        crm_client, "client", FakeCrm
+    ), patch.object(seed_documents, "clear") as clear_documents, patch.object(seed_console, "reseed") as reseed:
         assert seed_console.main([]) == 1
     clear_documents.assert_not_called()
     reseed.assert_not_called()
@@ -884,6 +892,11 @@ def test_an_unreachable_erp_clears_no_crm_rows(crm):
         "mysql_url": "mysql://u:p@db:3306/chat",
         "redis_url": "redis://r:6379/0",
         "verticals_mysql_url": "mysql://u:p@db:3306/verticals",
+        # main() refuses before the ERP is read without these; set them here
+        # rather than leaning on whatever a developer's backend/.env holds.
+        "crm_base_url": "https://crm.example.com",
+        "crm_email": "demo@example.com",
+        "crm_password": "secret",
     }
     _two_kinds(crm)
     down = FakeErp(down=True)
