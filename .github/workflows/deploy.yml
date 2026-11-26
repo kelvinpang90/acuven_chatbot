@@ -114,10 +114,10 @@ jobs:
             printf '%s %s pid=%s since=%s\n' ai_chatbot_demo "${{ steps.resolve.outputs.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
             echo "holding the host deploy lock"
             cd ${{ env.VPS_DEPLOY_PATH }}
-            # The commit running until now; its images are kept below for a quick
-            # rollback. The checkout is detached at each deployed commit, so HEAD
-            # is the last deploy (read the version with `git rev-parse HEAD`; a
-            # `git pull` here fails on the detached HEAD, which is intended).
+            # The commit of the last attempted deploy (usually the one running); its
+            # images are kept below for a quick rollback. The checkout is detached at
+            # each deployed commit (read it with `git rev-parse HEAD`; a `git pull`
+            # here fails on the detached HEAD, which is intended).
             prev_sha="$(git rev-parse HEAD)"
             # The compose file comes from the deployed commit itself (D2), not the
             # branch tip: a later push must not change what this run starts.
@@ -134,13 +134,14 @@ jobs:
             # Only once the new containers are up: point .env at the same images, so a
             # compose command run by hand here later starts this version, not whatever
             # .env named before (images are no longer pulled as `latest`).
-            if grep -q '^BACKEND_IMAGE=' .env; then sed -i "s#^BACKEND_IMAGE=.*#BACKEND_IMAGE=$BACKEND_IMAGE#" .env; else echo "BACKEND_IMAGE=$BACKEND_IMAGE" >> .env; fi
-            if grep -q '^FRONTEND_IMAGE=' .env; then sed -i "s#^FRONTEND_IMAGE=.*#FRONTEND_IMAGE=$FRONTEND_IMAGE#" .env; else echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> .env; fi
+            if grep -q '^BACKEND_IMAGE=' .env; then sed -i "s#^BACKEND_IMAGE=.*#BACKEND_IMAGE=$BACKEND_IMAGE#" .env; else echo "the new version is running, but .env has no BACKEND_IMAGE line to update; fix .env by hand"; exit 1; fi
+            if grep -q '^FRONTEND_IMAGE=' .env; then sed -i "s#^FRONTEND_IMAGE=.*#FRONTEND_IMAGE=$FRONTEND_IMAGE#" .env; else echo "the new version is running, but .env has no FRONTEND_IMAGE line to update; fix .env by hand"; exit 1; fi
             # Images are tagged by commit now, so an old one never goes dangling and
             # `prune -f` alone would keep them all. Remove this project's tags other
             # than this commit and the previous one. Never `prune -a`: it would take
             # other projects' images on this shared host.
-            docker images --format '{{.Repository}}:{{.Tag}}' | grep -F -e "${{ env.BACKEND_IMAGE }}:" -e "${{ env.FRONTEND_IMAGE }}:" | grep -v -e ":${{ steps.resolve.outputs.sha }}$" -e ":$prev_sha$" | xargs -r docker rmi >/dev/null 2>&1 || echo "some old images of this project could not be removed; continuing"
+            docker images "${{ env.BACKEND_IMAGE }}" --filter dangling=false --format '{{.Repository}}:{{.Tag}}' | grep -v -e ":${{ steps.resolve.outputs.sha }}$" -e ":$prev_sha$" | xargs -r docker rmi >/dev/null || echo "some old backend images could not be removed; continuing"
+            docker images "${{ env.FRONTEND_IMAGE }}" --filter dangling=false --format '{{.Repository}}:{{.Tag}}' | grep -v -e ":${{ steps.resolve.outputs.sha }}$" -e ":$prev_sha$" | xargs -r docker rmi >/dev/null || echo "some old frontend images could not be removed; continuing"
             docker image prune -f
 
       # D3: green only when the public URL, through infra_nginx and the frontend's
