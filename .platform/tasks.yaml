@@ -74,16 +74,16 @@ tasks:
       按已批准设计 docs/product/DESIGN.md 第 4 节，让同一份代码能以 demo 或 production 两种实例运行，
       为之后的生产实例打底。新增 backend/app/instance.py 作为实例取值、仅 Demo 路由清单与仅 Demo 配置项清单的唯一来源，
       backend/app/main.py 按它决定挂哪些路由，backend/app/config.py 加 chatbot_env 一项。
-      Demo 实例的行为与现在完全一样（合并前由运营者在 Demo 部署的环境配置里设好 demo，示例配置已带这一行）。
+      Demo 实例的行为与现在完全一样（本项目分配 Worker 之前，运营者已在 Demo 部署的环境配置里设好 demo；示例配置已带这一行）。
       明确不碰：工具注册与行业机器人菜单（之后的租户任务按租户从库读时再分实例）、数据种子与清理脚本、
       已停用网关入口的删除（另行登记）、数据库与库里的实例记录（CHAT-TASK-006）、前端、部署配置。
     status: ready
     depends_on: []
     acceptance_criteria:
-      - 实例取值只接受 demo 与 production；未设置、空或其他值时应用启动即报错退出，错误信息写明要设的变量名；只导入 app.main 不会因此报错
+      - 实例取值只接受 demo 与 production；未设置、空或其他值时应用启动（lifespan）即报错、不提供服务，错误信息写明要设的变量名；只导入 app.main 不会因此报错
       - production 下不挂这些路由，demo 下照旧全部挂上：网页聊天、导演台、企业微信回调、已停用网关入口、四个行业后台；两种取值各有一条测试核对实际路由表
       - 健康检查、WhatsApp 回调与 CRM 内部接口在两种实例下都挂上，有测试
-      - production 下任一仅 Demo 配置项（ERP 与 CRM 直连账号、导演台口令、企业微信、行业库连接）被设成非默认值时拒绝启动，清单只写在 instance.py 一处，有测试
+      - production 下任一仅 Demo 配置项（ERP 与 CRM 直连账号、导演台口令、企业微信、行业库连接、已停用网关入口的共享口令）被设成非默认值时拒绝启动，清单只写在 instance.py 一处，有测试
       - 现有测试一条不改照样通过：测试环境的 demo 取值只在 backend/tests/conftest.py 一处设置
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付，不合并、不直推

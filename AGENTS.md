@@ -47,6 +47,7 @@
 - 先计划：`docs/TODO.md` 里**还没有**的工作（临时需求、探索型任务）才需要先写计划、等确认
 - 追踪进度：做完把 `[ ]` 改成 `[x]`，在对应任务下写清楚做了什么、偏离了什么、验证到什么程度
 - 记录教训：写进该任务的记录里。**没有 `tasks/lessons.md` 这个文件**，不要凭空创建；审查的经验教训记在 `tasks/REVIEW.md` 的「记账」一节
+- **以上几条（改复选框、写记录）只适用于会话。OpenClaw Worker 的 run 只改该任务的 `allowed_change_paths`**，不碰 `docs/TODO.md`，也不在任何文件里写「检查通过」之类的结论；它的任务记录由自动收尾或会话补。
 
 ## 项目概况
 
@@ -75,7 +76,7 @@
 
 - **本仓库是公开仓库。** 绝不提交凭据、密钥、token、`.env`、证书私钥、客户数据。配置用 `.env.example` 写**变量名与明显的示例值**。
 - 不写真实主机名、IP、服务器上的绝对路径、本机路径。部署连接信息放 GitHub secrets，健康检查地址放 repository variables。
-  例外：部署脚本里的主机部署锁路径（约定见 `vps_infra` README「部署串行化」），以及历史文档里已写明的 Demo 域名。
+  例外：部署脚本里的主机部署锁路径（约定见 `vps_infra` README「部署串行化」）；已有的 Demo 域名、配置默认值与 VPS 目录（历史文档、`config.py`、`docker-compose.prod.yml` 里那些）照旧，不新增。
 - 发现已经提交的密钥：立即告诉 Kelvin 去轮换，不要只删文件——历史里还在。
 
 ## 登记任务（.platform/tasks.yaml 与 planning-v1）
