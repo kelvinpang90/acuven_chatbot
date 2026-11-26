@@ -1,5 +1,7 @@
 -r requirements.txt
 pytest>=8.0,<9.0
+# Pinned: CI and the OpenClaw Worker host must run the same ruff (lint.check).
+ruff==0.16.7
 # Tests only: reads back the invoice PDF the service writes by hand, so "it is a
 # valid PDF" is asserted by a parser rather than by the code that produced it.
 pypdf>=5.0,<7.0

@@ -142,7 +142,7 @@ def mysql():
 def test_ninety_customers_six_per_industry_and_language(batch):
     assert len(batch) == 90
     per = Counter((c.bot_id, c.language) for c in batch)
-    assert set(per) == {(b, l) for b in seed_console.BOTS for l in seed_lines.LANGUAGES}
+    assert set(per) == {(b, lang) for b in seed_console.BOTS for lang in seed_lines.LANGUAGES}
     assert set(per.values()) == {6}
     assert len({c.name for c in batch}) == 90
 
