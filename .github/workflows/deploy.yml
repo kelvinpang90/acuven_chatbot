@@ -111,7 +111,7 @@ jobs:
             # instead (flock works on it) without a failed open ending the shell.
             { command exec 9>>/run/lock/acuven-deploy.lock; } 2>/dev/null || { command exec 9</run/lock/acuven-deploy.lock; } 2>/dev/null || { echo "cannot open the host deploy lock; nothing has been changed"; exit 1; }
             flock -n 9 || { echo "another deploy holds the host lock ($(head -1 /run/lock/acuven-deploy.lock 2>/dev/null)); waiting up to 300s"; flock -w 300 9; } || { echo "the host deploy lock was not free within 300s; nothing has been changed (re-run this job)"; exit 1; }
-            printf '%s %s pid=%s since=%s\n' ai_chatbot_demo "${{ steps.resolve.outputs.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
+            printf '%s %s pid=%s since=%s\n' acuven_chatbot "${{ steps.resolve.outputs.sha }}" "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null >/run/lock/acuven-deploy.lock || true
             echo "holding the host deploy lock"
             cd ${{ env.VPS_DEPLOY_PATH }}
             # The commit of the last attempted deploy (usually the one running); its
