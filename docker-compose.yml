@@ -26,6 +26,12 @@ services:
     depends_on:
       - redis
       - mysql
+    # frontend/nginx.conf proxies to this name (production's container_name),
+    # so the local backend answers to it as well.
+    networks:
+      default:
+        aliases:
+          - ai_chatbot_backend
 
   # A local stand-in for the shared infra_redis. Deliberately unpersisted: this
   # one is for exercising the Redis path, not for keeping anything.
